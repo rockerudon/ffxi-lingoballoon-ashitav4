@@ -19,6 +19,7 @@ ui.name_background = nil
 ui.prompt = nil
 
 ui.message_text = nil
+ui.pending_text = nil
 ui.name_text = nil
 ui.timer_text = nil
 
@@ -28,6 +29,8 @@ ui._chars_shown = 0
 ui._text_speed = 0
 ui._has_portrait = false
 ui._prompt_anim_time = 0
+ui._pending_message_active = false
+ui._pending_message = ''
 
 ui._dialogue_settings = {}
 ui._system_settings = {}
@@ -36,11 +39,14 @@ ui._type = {}
 ui._theme = 'default'
 ui._scale = 1.0
 ui._show_portraits = true
+ui._always_on_top = true
 ui._theme_options = nil
 
 ui._sprite = nil
 ui._bounds = { 0, 0, 0, 0 }
 
+local PENDING_METRIC_PREFIX = 'g'
+local PENDING_METRIC_CROP_RATIO = 0.85
 
 local function setup_image(image, path)
     image:path(path)
@@ -59,8 +65,18 @@ local function setup_text(text, text_options)
     text:stroke_transparency(text_options.stroke.alpha or 0)
     text:stroke_color(text_options.stroke.red or 0, text_options.stroke.green or 0, text_options.stroke.blue or 0)
     text:stroke_width(text_options.stroke.width or 0)
-    text:italic(text_options.italic)
-    text:bold(text_options.bold)
+end
+
+local function setup_pending_text(text, text_options)
+    setup_text(text, text_options)
+end
+
+local function pending_render_text(message, use_metric_prefix)
+    if not use_metric_prefix then
+        return message or ''
+    end
+
+    return PENDING_METRIC_PREFIX .. (message or '')
 end
 
 local function setup_sprite()
@@ -78,6 +94,7 @@ function ui:load(settings, theme_options)
     self._theme = settings.theme
     self._scale = settings.scale
     self._show_portraits = settings.portraits
+    self._always_on_top = settings.always_on_top
     self._theme_options = theme_options
     self._text_speed = settings.text_speed
 
@@ -98,8 +115,6 @@ function ui:load(settings, theme_options)
     self._dialogue_settings.stroke.red = theme_options.message.dialogue.stroke.red
     self._dialogue_settings.stroke.green = theme_options.message.dialogue.stroke.green
     self._dialogue_settings.stroke.blue = theme_options.message.dialogue.stroke.blue
-    self._dialogue_settings.bold = theme_options.message.dialogue.bold
-    self._dialogue_settings.italic = theme_options.message.dialogue.italic
 
     self._system_settings.path = theme_options.system_background
     self._system_settings.color = {}
@@ -118,8 +133,6 @@ function ui:load(settings, theme_options)
     self._system_settings.stroke.red = theme_options.message.system.stroke.red
     self._system_settings.stroke.green = theme_options.message.system.stroke.green
     self._system_settings.stroke.blue = theme_options.message.system.stroke.blue
-    self._system_settings.bold = theme_options.message.system.bold
-    self._system_settings.italic = theme_options.message.system.italic
 
     self._type = self._dialogue_settings
 
@@ -146,10 +159,12 @@ function ui:load(settings, theme_options)
 
     -- Create text
     self.message_text = texts.new()
+    self.pending_text = texts.new()
     self.name_text = texts.new()
     self.timer_text = texts.new()
 
     setup_text(self.message_text, theme_options.message)
+    setup_pending_text(self.pending_text, theme_options.message)
     setup_text(self.name_text, theme_options.name)
     if theme_options.timer then
         setup_text(self.timer_text, theme_options.timer)
@@ -193,6 +208,10 @@ function ui:destroy()
         ui.message_text:destroy()
         ui.message_text = nil
     end
+    if ui.pending_text ~= nil then
+        ui.pending_text:destroy()
+        ui.pending_text = nil
+    end
     if ui.name_text ~= nil then 
         ui.name_text:destroy()
         ui.name_text = nil
@@ -212,6 +231,10 @@ end
 
 function ui:text_speed(speed)
     self._text_speed = speed
+end
+
+function ui:always_on_top(always_on_top)
+    self._always_on_top = always_on_top
 end
 
 function ui:window_size()
@@ -290,6 +313,12 @@ function ui:position(x, y, topleft_anchor)
     self.message_text:height(message_text_height)
     table.insert(elements, self.message_text)
 
+    self.pending_text:pos(x + message_text_offset_x, y + message_text_offset_y)
+    self.pending_text:size(self._theme_options.message.font_size * self._scale)
+    self.pending_text:width(message_text_width)
+    self.pending_text:height(message_text_height)
+    table.insert(elements, self.pending_text)
+
     self.name_text:pos(x + name_text_offset_x, y + name_text_offset_y)
     self.name_text:size(self._theme_options.name.font_size * self._scale)
     table.insert(elements, self.name_text)
@@ -324,15 +353,23 @@ function ui:hide()
     self.prompt:hide()
 
     self.message_text:hide()
+    self.pending_text:hide()
     self.name_text:hide()
     self.timer_text:hide()
 
     self._hidden = true
+    self._pending_message_active = false
 end
 
 function ui:show(timed)
     self.message_background:show()
-    self.message_text:show()
+    if self._pending_message_active then
+        self.message_text:hide()
+        self.pending_text:show()
+    else
+        self.message_text:show()
+        self.pending_text:hide()
+    end
 
     if not S{'', ' '}[self.name_text:text()] then
         self.name_background:show()
@@ -382,18 +419,22 @@ function ui:set_type(type)
     self:update_message_bg(self._type.path)
     self.message_text:alpha(self._type.color.alpha)
     self.message_text:color(self._type.color.red, self._type.color.green, self._type.color.blue)
+    self.pending_text:alpha(self._type.color.alpha)
+    self.pending_text:color(self._type.color.red, self._type.color.green, self._type.color.blue)
 
     if type == 15 and self._type.emote ~= nil then
         local emote_col = self._type.emote:split(',')
         if #emote_col == 3 then
             self.message_text:color(tonumber(emote_col[1]), tonumber(emote_col[2]), tonumber(emote_col[3]))
+            self.pending_text:color(tonumber(emote_col[1]), tonumber(emote_col[2]), tonumber(emote_col[3]))
         end
     end
     self.message_text:stroke_transparency(self._type.stroke.alpha)
     self.message_text:stroke_color(self._type.stroke.red, self._type.stroke.green, self._type.stroke.blue)
     self.message_text:stroke_width(self._type.stroke.width)
-    self.message_text:bold(self._type.bold)
-    self.message_text:italic(self._type.italic)
+    self.pending_text:stroke_transparency(self._type.stroke.alpha)
+    self.pending_text:stroke_color(self._type.stroke.red, self._type.stroke.green, self._type.stroke.blue)
+    self.pending_text:stroke_width(self._type.stroke.width)
 end
 
 function ui:set_character(name)
@@ -460,8 +501,16 @@ end
 
 function ui:set_message(message)
     message = message or ''
+    self._pending_message_active = false
+    self._pending_message = ''
+    self.pending_text:text('')
+    self.pending_text:hide()
+    if not self._hidden then
+        self.message_text:show()
+    end
     self._current_text = message
     self._char_length = utf8.len(message)
+    self.message_text:size(self._theme_options.message.font_size * self._scale)
     self.message_text:text(message)
 
     if self._text_speed <= 0 or message == '' then
@@ -469,11 +518,37 @@ function ui:set_message(message)
         self.message_text:set_clip_range(nil)
     else
         self._chars_shown = 1
-        self.message_text:set_clip_range(1,1)
+        self.message_text:set_clip_range(1, math.ceil(self._chars_shown))
     end
 
     -- this is here to update the layout depending if there's a portrait or not
     self:position(self.message_background:pos_x(), self.message_background:pos_y(), true)
+end
+
+function ui:set_pending_message(message)
+    message = message or ''
+    self._pending_message_active = true
+    self._pending_message = message
+    self._current_text = message
+    self._char_length = utf8.len(message)
+    self.message_text:size(self._theme_options.message.font_size * self._scale)
+    self.message_text:text('')
+    self.message_text:hide()
+    self.pending_text:size(self._theme_options.message.font_size * self._scale)
+    self.pending_text:text(pending_render_text(message, self._always_on_top))
+    self.pending_text:set_clip_range(nil)
+    if not self._hidden then
+        self.pending_text:show()
+    end
+    self._chars_shown = self._char_length
+    self.message_text:set_clip_range(nil)
+
+    -- this is here to update the layout depending if there's a portrait or not
+    self:position(self.message_background:pos_x(), self.message_background:pos_y(), true)
+    self.message_text:size(self._theme_options.message.font_size * self._scale)
+    self.message_text:set_clip_range(nil)
+    self.pending_text:size(self._theme_options.message.font_size * self._scale)
+    self.pending_text:set_clip_range(nil)
 end
 
 local function smooth_sawtooth(time, frequency)
@@ -536,7 +611,11 @@ function ui:render(delta_time)
     self.name_background:render(sprite)
     self.prompt:render(sprite)
 
-    self.message_text:render(sprite)
+    if self._pending_message_active then
+        self.pending_text:render(sprite)
+    else
+        self.message_text:render(sprite)
+    end
     self.name_text:render(sprite)
     self.timer_text:render(sprite)
 
@@ -560,7 +639,7 @@ function render_image_imgui(image)
                 { red / 255, green / 255, blue / 255, alpha / 255 })
 end
 
-function render_fontobject_imgui(text_obj)
+function render_fontobject_imgui(text_obj, crop_left)
     local fontobject = text_obj:font_object()
     if fontobject == nil then
         return
@@ -580,10 +659,13 @@ function render_fontobject_imgui(text_obj)
         end
         local y = fontobject.settings.position_y
 
+        crop_left = crop_left or 0
+        local width = math.max(1, rect.right - crop_left)
+
         imgui.SetCursorScreenPos({ x, y })
         imgui.Image(tonumber(ffi.cast('uint32_t', texture)),
-                    { rect.right, rect.bottom },
-                    { 0, 0 },
+                    { width, rect.bottom },
+                    { crop_left / rect.right, 0 },
                     { 1, 1 },
                     { 1, 1, 1, fontobject.settings.opacity })
     end
@@ -600,7 +682,7 @@ function ui:render_imgui(delta_time)
 
     local windowFlags = bit.bor(ImGuiWindowFlags_NoDecoration, ImGuiWindowFlags_NoFocusOnAppearing, ImGuiWindowFlags_NoNav, ImGuiWindowFlags_NoBackground, ImGuiWindowFlags_NoMove)
 
-    if imgui.Begin('Balloon', true, windowFlags) then
+    if imgui.Begin('LingoBalloon', true, windowFlags) then
         render_image_imgui(self.message_background)
         render_image_imgui(self.portrait_background)
         render_image_imgui(self.portrait)
@@ -608,7 +690,12 @@ function ui:render_imgui(delta_time)
         render_image_imgui(self.name_background)
         render_image_imgui(self.prompt)
 
-        render_fontobject_imgui(self.message_text)
+        if self._pending_message_active then
+            local crop_left = self._always_on_top and math.ceil(self._theme_options.message.font_size * self._scale * PENDING_METRIC_CROP_RATIO) or 0
+            render_fontobject_imgui(self.pending_text, crop_left)
+        else
+            render_fontobject_imgui(self.message_text)
+        end
         render_fontobject_imgui(self.name_text)
         render_fontobject_imgui(self.timer_text)
     end

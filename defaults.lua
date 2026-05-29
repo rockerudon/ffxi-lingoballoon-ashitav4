@@ -14,6 +14,10 @@ defaults.in_combat = false
 defaults.cinematic = true
 defaults.system_messages = true
 defaults.control_fps = true
+defaults.translate_enabled = true
+defaults.translation_source = 'auto'
+defaults.translation_target = 'pt'
+defaults.translation_copas_interval = 1
 
 defaults.additional_chat_modes = {
     144

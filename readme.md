@@ -1,4 +1,4 @@
-# Balloon (Ashita v4 Port)
+# LingoBalloon (Ashita v4 Port)
 
 This is an [Ashita v4](https://github.com/AshitaXI/Ashita-v4beta) port of the Balloon addon, forked from [StarlitGhost's version](https://github.com/StarlitGhost/Balloon).
 
@@ -6,60 +6,100 @@ The original Windower Balloon addon was created by Hando and modified by Kenshi,
 
 This Ashita v4 port was created by onimitch.
 
+LingoBalloon is a translation-focused fork by rockmizx. Its translation behavior is based on ideas from [LingoXI](https://github.com/rockmizx/LingoXI), adapted so Balloon can translate NPC and story dialogue while keeping the cinematic dialogue window.
+
 ![Example default](https://github.com/onimitch/ffxi-balloon-ashitav4/blob/main/Example-default.png "Example default")
 
 ## How to install:
-1. Download the latest Release from the [Releases page](https://github.com/onimitch/ffxi-balloon-ashitav4/releases)
-2. Extract the **_balloon_** folder to your **_Ashita4/addons_** folder
+1. Download the latest Release from the [Releases page](https://github.com/rockmizx/ffxi-lingoballoon-ashitav4/releases)
+2. Extract the **_lingoballoon_** folder to your **_Ashita4/addons_** folder
 
 ## How to enable it in-game:
 1. Login to your character in FFXI
-2. Type `/addon load balloon`
+2. Type `/addon load lingoballoon`
 
 ## How to have Ashita load it automatically:
 1. Go to your Ashita v4 folder
 2. Open the file **_Ashita4/scripts/default.txt_**
-3. Add `/addon load balloon` to the list of addons to load under "Load Plugins and Addons"
+3. Add `/addon load lingoballoon` to the list of addons to load under "Load Plugins and Addons"
 
 ## Commands
 
-You can use `/balloon` or `/bl`
+You can use `/lingoballoon`, `/lb` or `/lgb`
 
-`/balloon 0` - Hide balloon & display npc text in game log window.
+`/lingoballoon 0` - Hide balloon & display npc text in game log window.
 
-`/balloon 1` - Show balloon & hide npc text from game log window.
+`/lingoballoon 1` - Show balloon & hide npc text from game log window.
 
-`/balloon 2` - Show balloon & display npc text in game log window.
+`/lingoballoon 2` - Show balloon & display npc text in game log window.
 
-`/balloon reset` - Reset all settings back to default.
+`/lingoballoon translate` - Toggle translation on or off.
 
-`/balloon reset pos` - Reset the balloon position.
+`/lingoballoon lang <source> <target>` - Set translation source and target languages. Use `auto` as the source language for automatic detection.
 
-`/balloon theme <theme>` - Switch theme (see below for info on Themes).
+`/lingoballoon source <source>` - Set only the source translation language.
 
-`/balloon scale <scale>` - Scales the size of the balloon by a decimal (eg: 1.5).
+`/lingoballoon target <target>` - Set only the target translation language.
 
-`/balloon delay <seconds>` - Delay before closing promptless balloons.
+`/lingoballoon interval <frames>` - Set how often the Copas translation loop runs. The default is 1 frame.
 
-`/balloon speed <chars per second>` - Speed that text is displayed, in characters per second. Set to 0 to disable.
+`/lingoballoon cache` - Show how many translations are currently cached.
 
-`/balloon portrait` - Toggle the display of character portraits, if the theme has settings for them.
+`/lingoballoon cache clear` - Clear the translation cache.
 
-`/balloon move_close` - Toggle balloon auto-close on player movement.
+`/lingoballoon reset` - Reset all settings back to default.
 
-`/balloon always_on_top` - Toggle always on top (IMGUI mode). This mode renders the final elements using IMGUI to ensure Balloon always appears in front of any other custom UI. If for some reason you have issues with this mode, you can use this command to disable it.
+`/lingoballoon reset pos` - Reset the balloon position.
 
-`/balloon in_combat` - Toggle displaying balloon during combat (off by default).
+`/lingoballoon theme <theme>` - Switch theme (see below for info on Themes).
 
-`/balloon system` - Toggle displaying balloon for system messages, e.g Home Points. (on by default).
+`/lingoballoon scale <scale>` - Scales the size of the balloon by a decimal (eg: 1.5).
 
-`/balloon cinematic` - Toggle cinematic mode - auto hide game UI during cutscenes (on by default).
+`/lingoballoon delay <seconds>` - Delay before closing promptless balloons.
 
-`/balloon fps` - Toggle fps control during cutscenes to prevent lockups in certain cutscenes (on by default).
+`/lingoballoon speed <chars per second>` - Speed that text is displayed, in characters per second. Set to 0 to disable.
 
-`/balloon test <name> <lang> <mode>` - Display a test bubble. Lang: "-" (auto), "en" or "ja". Mode: 1 (dialogue), 2 (system).
+`/lingoballoon portrait` - Toggle the display of character portraits, if the theme has settings for them.
 
-`/balloon test` - List all available tests.
+`/lingoballoon move_close` - Toggle balloon auto-close on player movement.
+
+`/lingoballoon always_on_top` - Toggle always on top (IMGUI mode). This mode renders the final elements using IMGUI to ensure Balloon always appears in front of any other custom UI. If for some reason you have issues with this mode, you can use this command to disable it.
+
+`/lingoballoon in_combat` - Toggle displaying balloon during combat (off by default).
+
+`/lingoballoon system` - Toggle displaying balloon for system messages, e.g Home Points. (on by default).
+
+`/lingoballoon cinematic` - Toggle cinematic mode - auto hide game UI during cutscenes (on by default).
+
+`/lingoballoon fps` - Toggle fps control during cutscenes to prevent lockups in certain cutscenes (on by default).
+
+`/lingoballoon test <name> <lang> <mode>` - Display a test bubble. Lang: "-" (auto), "en" or "ja". Mode: 1 (dialogue), 2 (system).
+
+`/lingoballoon test` - List all available tests.
+
+## Translation
+
+LingoBalloon translates the dialogue text shown in the Balloon window. It does not modify the original game data.
+
+Translation requests are handled asynchronously using Copas/socket networking, following the same general non-blocking approach used by [LingoXI](https://github.com/rockmizx/LingoXI). This keeps the game from waiting on the translation request every frame.
+
+While a new line is being translated, LingoBalloon shows a localized placeholder such as `Translating...`, `Traduzindo...` or `Traduciendo...`, depending on the selected target language. Once a line has been translated, it is saved to a local cache so repeated dialogue can appear immediately.
+
+The default target language is Portuguese. You can change it with:
+
+`/lingoballoon target en`
+
+`/lingoballoon target es`
+
+`/lingoballoon target ja`
+
+You can also set both source and target languages at once:
+
+`/lingoballoon lang auto pt`
+
+`/lingoballoon lang en pt`
+
+`/lingoballoon lang ja en`
 
 ## Cinematic mode
 
@@ -67,7 +107,7 @@ Balloon will auto hide the game UI during a cutscene and handle key/button press
 If the game presents you with options during a cutscene, Balloon will temporarily re-show the game UI and hide it again once you've made a selection.
 
 Cinematic mode is enabled by default. 
-If you want to turn it off, you can toggle the option using `/balloon cinematic`.
+If you want to turn it off, you can toggle the option using `/lingoballoon cinematic`.
 
 ## Moving balloon
 
@@ -101,24 +141,24 @@ Alternatively it will look for "DePixel" font if "DotGothic16" not installed, wh
 
 ## Theme customisation
 
-If you want to customise a theme, copy one of the existing themes from `addons/balloon/themes` into `config/addons/balloon/themes`.
+If you want to customise a theme, copy one of the existing themes from `addons/lingoballoon/themes` into `config/addons/lingoballoon/themes`.
 
-Example: `config/addons/balloon/themes/my_theme`.
+Example: `config/addons/lingoballoon/themes/my_theme`.
 
-In game switch to your new theme: `/balloon theme my_theme`.
+In game switch to your new theme: `/lingoballoon theme my_theme`.
 
 Edit the theme.xml file as you wish, or replace the pngs with alternatives. Sorry there isn't any more help on this for now but hopefully the existing themes are enough to figure out how it works.
 
-Reload the theme by using: `/balloon theme my_theme`.
+Reload the theme by using: `/lingoballoon theme my_theme`.
 
 See your changes immediately by using one of the test prompts:
 
-e.g: `/balloon test bahamut` or `/balloon test colors`.
+e.g: `/lingoballoon test bahamut` or `/lingoballoon test colors`.
 
 
 ## Issues/Support
 
-I only have limited time available to offer support, but if you have a problem, have discovered a bug or want to request a feature, please [create an issue on GitHub](https://github.com/onimitch/ffxi-balloon-ashitav4/issues).
+I only have limited time available to offer support, but if you have a problem, have discovered a bug or want to request a feature, please [create an issue on GitHub](https://github.com/rockmizx/ffxi-lingoballoon-ashitav4/issues).
 
 
 ## Gdifonts

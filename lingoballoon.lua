@@ -1,5 +1,5 @@
 addon.name      = 'lingoballoon'
-addon.author    = 'Originally by Hando, English support added by Yuki & Kenshi, themes added by Ghosty, ported to Ashita v4 by onimitch. Translation fork by rockmizx.'
+addon.author    = 'Originally by Hando, English support added by Yuki & Kenshi, themes added by Ghosty, ported to Ashita v4 by onimitch. Translation fork by rockerudon.'
 addon.version   = '4.3.2-lingoballoon.1'
 addon.desc      = 'Displays NPC dialogue in a cinematic balloon and translates it using LingoXI-inspired translation logic.'
 addon.link      = 'https://github.com/rockmizx/ffxi-lingoballoon-ashitav4'
@@ -1001,7 +1001,9 @@ end)
 
 ashita.events.register('load', 'lingoballoon_load', function()
     balloon.settings = settings.load(default_settings)
-    if (tonumber(balloon.settings.translation_copas_interval) or 0) <= 1 then
+    local copas_interval = tonumber(balloon.settings.translation_copas_interval)
+    -- Migrate the old slow default while still allowing users to pick any other value.
+    if copas_interval == nil or copas_interval < 1 or copas_interval == 17 then
         balloon.settings.translation_copas_interval = default_settings.translation_copas_interval
         settings.save()
     end
