@@ -1,4 +1,4 @@
-# LingoBalloon (Ashita v4 Port)
+﻿# LingoBalloon (Ashita v4 Port)
 
 This is an [Ashita v4](https://github.com/AshitaXI/Ashita-v4beta) port of the Balloon addon, forked from [StarlitGhost's version](https://github.com/StarlitGhost/Balloon).
 
@@ -168,3 +168,9 @@ This addon uses a custom fork of ThornyXI's gdifonts and gdifonttextures, in ord
 https://github.com/onimitch/gdifonts/tree/regions
 
 https://github.com/onimitch/gdifonttexture/tree/regions
+
+## Support
+
+If you find this project useful, you can support development here:
+
+<a href="https://www.buymeacoffee.com/rockmizx" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50" width="210"></a>
