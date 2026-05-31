@@ -8,7 +8,6 @@ local copas = nil
 local socket = nil
 local url_mod = nil
 local json_mod = nil
-local ssl_available = false
 
 local MAX_INFLIGHT = 4
 local MAX_QUEUE = 64
@@ -83,10 +82,6 @@ local function ensure_modules()
     local ok_socket, socket_mod = pcall(require, 'socket')
     local ok_copas, copas_mod = pcall(require, 'copas')
     local ok_url, url_module = pcall(require, 'socket.url')
-    local ok_ssl, ssl_mod = pcall(require, 'ssl')
-    if not ok_ssl then
-        ok_ssl, ssl_mod = pcall(require, 'socket.ssl')
-    end
 
     if not ok_copas or not ok_socket then
         return false
@@ -95,12 +90,6 @@ local function ensure_modules()
     copas = copas_mod
     socket = socket_mod
     url_mod = ok_url and url_module or nil
-    ssl_available = ok_ssl and ssl_mod ~= nil
-
-    -- Copas expects LuaSec as require('ssl'); some bundles expose it as socket.ssl.
-    if ssl_available and package.loaded.ssl == nil then
-        package.loaded.ssl = ssl_mod
-    end
 
     local ok_json, loaded_json = pcall(require, 'json')
     if ok_json then
@@ -251,149 +240,7 @@ local function make_key(src, tgt, text)
     return table.concat({ src, tgt, text }, '\31')
 end
 
-local function http_get(host, path, secure)
-    local tcp, err = socket.tcp()
-    if not tcp then
-        return nil, err
-    end
-
-    tcp:settimeout(0)
-    local stream
-    local port = secure and 443 or 80
-
-    if secure then
-        if not ssl_available then
-            return nil, 'ssl unavailable'
-        end
-
-        stream = copas.wrap(tcp, {
-            wrap = {
-                mode = 'client',
-                protocol = 'any',
-                verify = 'none',
-                options = { 'all', 'no_sslv2', 'no_sslv3' },
-            },
-            sni = {
-                names = { host },
-                strict = false,
-            },
-        })
-    else
-        stream = copas.wrap(tcp)
-    end
-
-    if type(stream.settimeouts) == 'function' then
-        stream:settimeouts(CONNECT_TIMEOUT, SEND_TIMEOUT, RECEIVE_TIMEOUT)
-    elseif type(stream.settimeout) == 'function' then
-        stream:settimeout(RECEIVE_TIMEOUT)
-    end
-
-    local ok, connect_err = pcall(function()
-        return stream:connect(host, port)
-    end)
-    if not ok then
-        return nil, connect_err
-    end
-    if not connect_err then
-        return nil, 'connect failed'
-    end
-
-    local connected = connect_err
-    local err_msg = nil
-    if type(connect_err) == 'table' then
-        if connect_err[1] ~= nil then
-            connected = connect_err[1]
-            err_msg = connect_err[2]
-        else
-            connected = true
-        end
-    end
-    if connected == nil or connected == false then
-        return nil, err_msg or 'connect failed'
-    end
-
-    local ok_send, send_err = pcall(function()
-        return stream:send(table.concat({
-            'GET ' .. path .. ' HTTP/1.1',
-            'Host: ' .. host,
-            'User-Agent: LingoBalloon-copas',
-            'Accept: application/json',
-            'Accept-Encoding: identity',
-            'Connection: close',
-            '\r\n',
-        }, '\r\n'))
-    end)
-    if not ok_send or not send_err then
-        return nil, ok_send and 'send failed' or send_err
-    end
-
-    local status = stream:receive('*l')
-    if not status then
-        return nil, 'no status'
-    end
-
-    local code = tonumber(status:match('^HTTP/%d%.%d%s+(%d%d%d)')) or 0
-    local headers = {}
-    while true do
-        local line = stream:receive('*l')
-        if not line or line == '' then
-            break
-        end
-
-        local key, value = line:match('^(.-):%s*(.*)$')
-        if key and value then
-            headers[string.lower(key)] = value
-        end
-    end
-
-    local body = {}
-    if headers['transfer-encoding'] == 'chunked' then
-        while true do
-            local size_line = stream:receive('*l')
-            if not size_line then
-                break
-            end
-
-            local size = tonumber(size_line, 16)
-            if not size or size == 0 then
-                stream:receive('*l')
-                break
-            end
-
-            local chunk = stream:receive(size)
-            if chunk and #chunk > 0 then
-                body[#body + 1] = chunk
-            end
-            stream:receive('*l')
-        end
-    else
-        local length = tonumber(headers['content-length'])
-        if length and length > 0 then
-            local data = stream:receive(length)
-            if data and #data > 0 then
-                body[#body + 1] = data
-            end
-        else
-            while true do
-                local chunk, read_err, partial = stream:receive(1024)
-                chunk = chunk or partial
-                if chunk and #chunk > 0 then
-                    body[#body + 1] = chunk
-                end
-                if read_err == 'closed' then
-                    break
-                end
-                if read_err and read_err ~= 'timeout' then
-                    break
-                end
-            end
-        end
-    end
-
-    return table.concat(body), code
-end
-
-local function http_get_legacy(host, path)
+local function http_get(host, path)
     local tcp, err = socket.tcp()
     if not tcp then
         return nil, err
@@ -406,6 +253,7 @@ local function http_get_legacy(host, path)
     elseif type(stream.settimeout) == 'function' then
         stream:settimeout(RECEIVE_TIMEOUT)
     end
+
     local ok, connect_err = stream:connect(host, 80)
     if not ok then
         return nil, connect_err
@@ -527,10 +375,7 @@ pump_queue = function()
                 .. '&tl=' .. job.target
                 .. '&dt=t&q=' .. urlencode(job.send)
 
-            local body, code = http_get('translate.googleapis.com', path, true)
-            if code ~= 200 then
-                body, code = http_get_legacy('translate.googleapis.com', path)
-            end
+            local body, code = http_get('translate.googleapis.com', path)
             if code == 200 and type(body) == 'string' then
                 translated = extract_translation(body)
             end
